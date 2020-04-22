@@ -8,7 +8,11 @@ import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
 import com.google.common.cache.RemovalListener;
 import com.google.common.cache.RemovalNotification;
-
+/**
+ * https://ifeve.com/google-guava-cachesexplained/
+ * @author luxu.zlx
+ *
+ */
 public class Cache {
 
 	static LoadingCache<String, String> cacheAutoExpire = CacheBuilder.newBuilder().maximumSize(1000)
