@@ -17,104 +17,110 @@ import com.google.common.util.concurrent.ListenableFutureTask;
 
 /**
  * https://ifeve.com/google-guava-cachesexplained/
- * 
- * @author luxu.zlx
  *
+ * @author luxu.zlx
  */
 public class Cache {
 
-	static ThreadPoolExecutor pool = new ThreadPoolExecutor(5, 5, 0L, TimeUnit.MILLISECONDS,
-			new LinkedBlockingQueue<Runnable>());
+    static ThreadPoolExecutor pool = new ThreadPoolExecutor(5, 5, 0L, TimeUnit.MILLISECONDS,
+            new LinkedBlockingQueue<Runnable>());
 
-	static LoadingCache<String, String> cacheAutoRefresh = CacheBuilder.newBuilder().maximumSize(1000)
-			.refreshAfterWrite(5, TimeUnit.SECONDS).build(new CacheLoader<String, String>() {
+    static LoadingCache<String, String> cacheAutoRefresh = CacheBuilder.newBuilder().maximumSize(1000)
+            .concurrencyLevel(16)
+            .refreshAfterWrite(5, TimeUnit.SECONDS).build(new CacheLoader<String, String>() {
 
-				@Override
-				public String load(String key) throws Exception {
-					// TODO Auto-generated method stub
-					return "value";
-				}
+                @Override
+                public String load(String key) throws Exception {
+                    // TODO Auto-generated method stub
+                    return "value";
+                }
 
-				@Override
-				public ListenableFuture<String> reload(String key, String value) throws Exception {
-					// TODO Auto-generated method stub
-					// 同步
-					// return Futures.immediateFuture(value);
+                //test1
+                @Override
+                public ListenableFuture<String> reload(String key, String value) throws Exception {
+                    // TODO Auto-generated method stub
+                    // 同步
+                    // return Futures.immediateFuture(value);
+ 
+                    // 异步计算新值
+                    ListenableFutureTask<String> task = ListenableFutureTask.create(new Callable<String>() {
+ 
+                        @Override
+                        public String call() throws Exception {
+                            // TODO Auto-generated method stub
+                            return "new value";
+                        }
 
-					// 异步计算新值
-					ListenableFutureTask<String> task = ListenableFutureTask.create(new Callable<String>() {
+                    });
 
-						@Override
-						public String call() throws Exception {
-							// TODO Auto-generated method stub
-							return "new value";
-						}
+                    pool.execute(task);
 
-					});
+                    return task;
 
-					pool.execute(task);
+                }
 
-					return task;
+            });
 
-				}
+    static LoadingCache<String, String> cacheAutoExpire = CacheBuilder.newBuilder().maximumSize(1000)
+            .expireAfterWrite(5, TimeUnit.SECONDS).removalListener(new RemovalListener<String, String>() {
 
-			});
+                public void onRemoval(RemovalNotification<String, String> notification) {
 
-	static LoadingCache<String, String> cacheAutoExpire = CacheBuilder.newBuilder().maximumSize(1000)
-			.expireAfterWrite(5, TimeUnit.SECONDS).removalListener(new RemovalListener<String, String>() {
+                    System.out.println(Joiner.on("_").join("onRemoval", notification.getCause(), notification.getKey(),
+                            notification.getValue()));
+                }
+            }).build(new CacheLoader<String, String>() {
+                public String load(String key) {
 
-				public void onRemoval(RemovalNotification<String, String> notification) {
+                    return "value";
+                }
+            });
 
-					System.out.println(Joiner.on("_").join("onRemoval", notification.getCause(), notification.getKey(),
-							notification.getValue()));
-				}
-			}).build(new CacheLoader<String, String>() {
-				public String load(String key) {
+    static void testAutoExpire() {
+        System.out.println(cacheAutoExpire.getUnchecked("a"));
+        new Thread(() -> {
+            for (; ; ) {
+                try {
+                    Thread.sleep(1000);
+                } catch (InterruptedException e) {
+                    // TODO Auto-generated catch block
+                    e.printStackTrace();
+                }
+                System.out.println(cacheAutoExpire.getIfPresent("a"));
+                if (null == cacheAutoExpire.getIfPresent("a")) {
 
-					return "value";
-				}
-			});
+                    // 主动回收过期的
+                    // cacheAutoExpire.cleanUp();
+                    // 任何时候，你都可以显式地清除缓存项，而不是等到它被回收：
+                    cacheAutoExpire.invalidate("a");
+                }
 
-	static void testAutoExpire() {
-		System.out.println(cacheAutoExpire.getUnchecked("a"));
-		new Thread(() -> {
-			for (;;) {
-				try {
-					Thread.sleep(1000);
-				} catch (InterruptedException e) {
-					// TODO Auto-generated catch block
-					e.printStackTrace();
-				}
-				System.out.println(cacheAutoExpire.getIfPresent("a"));
-				if (null == cacheAutoExpire.getIfPresent("a")) {
-					cacheAutoExpire.cleanUp();
-				}
+            }
+        }).start();
+        ;
+    }
 
-			}
-		}).start();
-		;
-	}
+    static void testAutoRefresh() throws InterruptedException {
+        System.out.println(cacheAutoRefresh.getUnchecked("a"));
+        new Thread(() -> {
+            for (; ; ) {
+                try {
+                    Thread.sleep(1000);
+                } catch (InterruptedException e) {
+                    // TODO Auto-generated catch block
+                    e.printStackTrace();
+                }
+                System.out.println(cacheAutoRefresh.getIfPresent("a"));
 
-	static void testAutoRefresh() throws InterruptedException {
-		System.out.println(cacheAutoRefresh.getUnchecked("a"));
-		new Thread(() -> {
-			for (;;) {
-				try {
-					Thread.sleep(1000);
-				} catch (InterruptedException e) {
-					// TODO Auto-generated catch block
-					e.printStackTrace();
-				}
-				System.out.println(cacheAutoRefresh.getIfPresent("a"));
+            }
+        }).start();
+        ;
+    }
 
-			}
-		}).start();
-		;
-	}
+    public static void main(String[] args) throws InterruptedException {
+        // testAutoRefresh();
+        testAutoExpire();
 
-	public static void main(String[] args) throws InterruptedException {
-		testAutoRefresh();
-
-	}
+    }
 
 }
